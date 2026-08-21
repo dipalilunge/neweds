@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Student portal — {{ institute.name }}{% endblock %}
+{% block body_class %}page-dashboard{% endblock %}
+
+{% block content %}
+<header class="dash-nav">
+  <a class="nav__brand" href="{{ url_for('home') }}">
+    <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="{{ institute.name }} logo">
+    <span>{{ institute.name }}</span>
+  </a>
+  <div class="dash-nav__right">
+    <a href="{{ url_for('student_logout') }}" class="btn btn--ghost btn--small">Log out</a>
+  </div>
+</header>
+
+<main class="dash dash--single">
+  <section class="dash-panel">
+    {% if student %}
+    <p style="margin-bottom:1rem;font-weight:700">Welcome, {{ student.name }}.</p>
+    {% endif %}
+    <p class="section-label">— Course Notes —</p>
+    <h2>Pick your course to open notes</h2>
+    <p class="auth-card__hint">Notes open in Google Drive in a new tab. If a folder link hasn't been set up yet, ask your instructor.</p>
+    <div class="notes-grid">
+      {% for c in courses %}
+      <a class="notes-card" href="{{ c.drive_link }}" target="_blank" rel="noopener">
+        <span class="notes-card__track">{{ c.track }}</span>
+        <h4>{{ c.name }}</h4>
+        <span class="notes-card__cta">Open notes &rarr;</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="dash-panel">
+    <p class="section-label">— Project Submissions —</p>
+    <h2>Upload your work</h2>
+    <form method="POST" action="{{ url_for('student_work') }}" enctype="multipart/form-data" class="admit-form">
+      <div class="field">
+        <label for="work_course_id">Course</label>
+        <select id="work_course_id" name="course_id" required>
+          <option value="" disabled selected>Select a course</option>
+          {% for c in courses %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="work_title">Project title</label>
+        <input type="text" id="work_title" name="title" required>
+      </div>
+      <div class="field field--wide">
+        <label for="work_file">Project file</label>
+        <input type="file" id="work_file" name="work_file" required>
+      </div>
+      <button type="submit" class="btn btn--primary">Upload work</button>
+    </form>
+    {% if submissions %}
+    <h3>My uploads</h3>
+    <div class="table-wrap"><table class="dash-table"><thead><tr><th>Title</th><th>Course</th><th>Submitted</th></tr></thead><tbody>
+      {% for submission in submissions %}<tr><td>{{ submission.title }}</td><td>{{ submission.course_id }}</td><td>{{ submission.submitted_at }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}
