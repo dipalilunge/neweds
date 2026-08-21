@@ -60,6 +60,21 @@
   </section>
 
   <section class="dash-panel">
+    <p class="section-label">— Batch Content —</p>
+    <h2>Upload notes or assessments</h2>
+    <form method="POST" enctype="multipart/form-data" class="admit-form">
+      <input type="hidden" name="action" value="upload_content">
+      <div class="field"><label for="content_batch_id">Batch</label><select id="content_batch_id" name="content_batch_id" required><option value="" disabled selected>Select a batch</option>{% for b in batches %}<option value="{{ b.id }}">{{ b.name }} — {{ b.course_id }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="content_type">Content type</label><select id="content_type" name="content_type"><option value="notes">Notes</option><option value="assessment">Assessment</option></select></div>
+      <div class="field"><label for="content_title">Title</label><input id="content_title" name="content_title" required></div>
+      <div class="field"><label for="content_file">File</label><input id="content_file" type="file" name="content_file"></div>
+      <div class="field field--wide"><label for="content_link">Or external link</label><input id="content_link" type="url" name="content_link" placeholder="https://..."></div>
+      <button type="submit" class="btn btn--primary">Publish content</button>
+    </form>
+    {% if content %}<div class="table-wrap"><table class="dash-table"><thead><tr><th>Title</th><th>Type</th><th>Batch</th><th>Published</th></tr></thead><tbody>{% for item in content %}<tr><td>{{ item.title }}</td><td>{{ item.type|title }}</td><td>{{ item.batch_id }}</td><td>{{ item.uploaded_at }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+  </section>
+
+  <section class="dash-panel">
     <p class="section-label">— New Admission —</p>
     <h2>Register a student</h2>
     <form method="POST" class="admit-form">
@@ -190,8 +205,9 @@
             <td>{{ submission.title }}</td>
             <td>{{ submission.course_id }}</td>
             <td>{{ submission.submitted_at }}</td>
-            <td><a href="{{ url_for('admin_work_download', stored_name=submission.stored_name) }}">Download</a></td>
+            <td><a href="{{ url_for('admin_work_download', stored_name=submission.relative_path or submission.stored_name) }}">Download</a></td>
           </tr>
+          <tr><td colspan="5"><form method="POST" class="admit-form"><input type="hidden" name="action" value="review_submission"><input type="hidden" name="submission_id" value="{{ submission.submission_id }}"><input name="teacher_name" placeholder="Teacher name"><input name="teacher_review" placeholder="Review feedback" required><select name="review_status"><option>Reviewed</option><option>Needs changes</option><option>Approved</option></select><button class="btn btn--secondary" type="submit">Save review</button></form>{% for review in submission.reviews %}<p><strong>{{ review.teacher }} ({{ review.status }}):</strong> {{ review.review }}</p>{% endfor %}</td></tr>
           {% endfor %}
         </tbody>
       </table>

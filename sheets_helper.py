@@ -25,6 +25,7 @@ FIELDNAMES = [
     "Payment Method",
     "Transaction ID",
     "Batch Name",
+    "Batch ID",
 ]
 
 _sheet_cache = None
@@ -120,6 +121,7 @@ def add_admission(record: dict):
         "Payment Method": record.get("payment_method", "Cash"),
         "Transaction ID": record.get("transaction_id", ""),
         "Batch Name": record.get("batch_name", ""),
+        "Batch ID": record.get("batch_id", ""),
     }
 
     worksheet = _try_connect()
@@ -168,3 +170,23 @@ def is_name_admitted(name: str) -> bool:
             if str(row.get("Student Name", "")).strip().lower() == target:
                 return True
     return False
+
+
+def get_admission_for_name(name: str):
+    """Return the latest admission record for a student name."""
+    if not name:
+        return None
+    target = name.strip().lower()
+    worksheet = _try_connect()
+    if worksheet is not None:
+        records = list(reversed(worksheet.get_all_records()))
+    else:
+        path = _local_csv_path()
+        if not os.path.exists(path):
+            return None
+        with open(path, newline="", encoding="utf-8") as f:
+            records = list(reversed(list(csv.DictReader(f))))
+    return next(
+        (r for r in records if str(r.get("Student Name", "")).strip().lower() == target),
+        None,
+    )

@@ -30,6 +30,25 @@ def courses_by_id():
     return {c["id"]: c for c in config.COURSES}
 
 
+def student_enrollment(student):
+    admission = sheets_helper.get_admission_for_name(student.get("name", ""))
+    if not admission:
+        return None
+    course = next(
+        (c for c in config.COURSES if c["name"].strip().lower() == str(admission.get("Course Name", "")).strip().lower()),
+        None,
+    )
+    batches = portal_storage.get_batches()
+    batch_id = str(admission.get("Batch ID", ""))
+    batch_name = str(admission.get("Batch Name", ""))
+    batch = next((b for b in batches if b.get("id") == batch_id), None)
+    if not batch and batch_name:
+        batch = next((b for b in batches if b.get("name", "").strip().lower() == batch_name.strip().lower()), None)
+    if not course or not batch or batch.get("course_id") != course.get("id"):
+        return None
+    return {"course": course, "batch": batch, "admission": admission}
+
+
 # ---------------------------------------------------------------------------
 # Public site
 # ---------------------------------------------------------------------------
@@ -121,6 +140,32 @@ def admin_dashboard():
                 flash(f"Batch created for {course['name']}.", "success")
             return redirect(url_for("admin_dashboard"))
 
+        if request.form.get("action") == "upload_content":
+            batch_id = request.form.get("content_batch_id", "")
+            content_type = request.form.get("content_type", "notes")
+            title = request.form.get("content_title", "").strip()
+            link = request.form.get("content_link", "").strip()
+            uploaded_file = request.files.get("content_file")
+            batch = next((b for b in portal_storage.get_batches() if b.get("id") == batch_id), None)
+            if not batch or content_type not in {"notes", "assessment"} or not title or (not link and not uploaded_file):
+                flash("Select a batch, content type, title and file or link.", "error")
+            else:
+                portal_storage.save_content(batch["course_id"], batch_id, content_type, title, uploaded_file, link)
+                flash("Course content uploaded for this batch.", "success")
+            return redirect(url_for("admin_dashboard"))
+
+        if request.form.get("action") == "review_submission":
+            submission_id = request.form.get("submission_id", "")
+            review = request.form.get("teacher_review", "").strip()
+            status = request.form.get("review_status", "Reviewed")
+            teacher = request.form.get("teacher_name", "Teacher").strip() or "Teacher"
+            if submission_id and review:
+                portal_storage.add_review(submission_id, teacher, review, status)
+                flash("Teacher review saved.", "success")
+            else:
+                flash("A review is required.", "error")
+            return redirect(url_for("admin_dashboard"))
+
         errors = []
         student_name = request.form.get("student_name", "").strip()
         course_id = request.form.get("course_id", "")
@@ -185,12 +230,16 @@ def admin_dashboard():
             return redirect(url_for("admin_dashboard"))
 
     recent = sheets_helper.get_recent_admissions(limit=25)
+    submissions = portal_storage.get_submissions()
+    for submission in submissions:
+        submission["reviews"] = portal_storage.get_reviews(submission.get("submission_id"))
     return render_template(
         "admin_dashboard.html",
         institute=config.INSTITUTE,
         courses=config.COURSES,
         batches=portal_storage.get_batches(),
-        submissions=portal_storage.get_submissions(),
+        submissions=submissions,
+        content=portal_storage.get_all_content(),
         recent=recent,
         using_sheets=sheets_helper.is_using_google_sheets(),
     )
@@ -208,11 +257,13 @@ def student_login():
             user = auth_helper.get_user(email)
             if not user:
                 flash("Account not found.", "error")
-            elif not sheets_helper.is_name_admitted(user.get("name", "")):
-                flash("Your name is not found in admissions — contact the institute.", "error")
             else:
-                session["student_email"] = email
-                return redirect(url_for("student_portal"))
+                user_name = str(user.get("name", ""))
+                if not sheets_helper.is_name_admitted(user_name):
+                    flash("Your name is not found in admissions — contact the institute.", "error")
+                else:
+                    session["student_email"] = email
+                    return redirect(url_for("student_portal"))
         flash("Incorrect email or password.", "error")
     return render_template("student_login.html", institute=config.INSTITUTE)
 
@@ -236,15 +287,26 @@ def student_portal():
         session.pop("student_email", None)
         flash("Your name is not listed in admissions — access denied.", "error")
         return redirect(url_for("student_login"))
-    courses_with_links = [
-        {**c, "drive_link": config.DRIVE_NOTES_LINKS.get(c["id"], "#")} for c in config.COURSES
+    enrollment = student_enrollment(student)
+    if not enrollment:
+        flash("Your admission is not assigned to an active course batch yet. Contact admin.", "error")
+        return render_template("student.html", institute=config.INSTITUTE, courses=[], student=student, enrollment=None, submissions=[])
+    student = {**student, "batch_id": enrollment["batch"]["id"], "batch_name": enrollment["batch"]["name"]}
+    course = {**enrollment["course"], "drive_link": config.DRIVE_NOTES_LINKS.get(enrollment["course"]["id"], "#")}
+    submissions = [
+        submission for submission in portal_storage.get_submissions(student.get("email"))
+        if submission.get("course_id") == course["id"] and submission.get("batch_id") == student["batch_id"]
     ]
+    for submission in submissions:
+        submission["reviews"] = portal_storage.get_reviews(submission.get("submission_id"))
     return render_template(
         "student.html",
         institute=config.INSTITUTE,
-        courses=courses_with_links,
+        courses=[course],
         student=student,
-        submissions=portal_storage.get_submissions(student.get("email")),
+        enrollment=enrollment,
+        content=portal_storage.get_content(course["id"], student["batch_id"]),
+        submissions=submissions,
     )
 
 
@@ -253,24 +315,57 @@ def student_work():
     if not session.get("student_email"):
         return redirect(url_for("student_login"))
     student = auth_helper.get_user(session["student_email"])
+    enrollment = student_enrollment(student) if student else None
     uploaded_file = request.files.get("work_file")
     course_id = request.form.get("course_id", "")
     title = request.form.get("title", "").strip()
-    if not student or course_id not in courses_by_id() or not title or not uploaded_file or not uploaded_file.filename:
-        flash("Choose a course, title and file before uploading.", "error")
+    if not student or not enrollment or course_id != enrollment["course"]["id"] or not title or not uploaded_file or not uploaded_file.filename:
+        flash("You can upload work only for your enrolled course and batch.", "error")
     else:
-        portal_storage.save_submission(student, course_id, title, uploaded_file)
+        scoped_student = {**student, "batch_id": enrollment["batch"]["id"], "batch_name": enrollment["batch"]["name"]}
+        portal_storage.save_submission(scoped_student, course_id, title, uploaded_file)
         flash("Your work was uploaded successfully.", "success")
     return redirect(url_for("student_portal"))
 
 
-@app.route("/admin/work/<stored_name>")
+@app.route("/admin/work/<path:stored_name>")
 @admin_required
 def admin_work_download(stored_name):
     path = portal_storage.submission_path(stored_name)
     if not path:
         return "File not found", 404
     return send_file(path, as_attachment=True)
+
+
+@app.route("/student/content/<path:relative_path>")
+def student_content_download(relative_path):
+    student_email = session.get("student_email")
+    student = auth_helper.get_user(student_email) if isinstance(student_email, str) else None
+    enrollment = student_enrollment(student) if student else None
+    allowed = portal_storage.get_content(enrollment["course"]["id"], enrollment["batch"]["id"]) if enrollment else []
+    if not any(item.get("relative_path") == relative_path for item in allowed):
+        return "Access denied", 403
+    path = portal_storage.content_path(relative_path)
+    return send_file(path, as_attachment=True) if path else ("File not found", 404)
+
+
+@app.route("/student/submission/<submission_id>/<path:relative_path>")
+def student_submission_download(submission_id, relative_path):
+    student_email = session.get("student_email")
+    submissions = portal_storage.get_submissions(student_email) if isinstance(student_email, str) else []
+    submission = next((s for s in submissions if s.get("submission_id") == submission_id), None)
+    student = auth_helper.get_user(student_email) if isinstance(student_email, str) else None
+    enrollment = student_enrollment(student) if student else None
+    if (
+        not submission
+        or not enrollment
+        or submission.get("course_id") != enrollment["course"]["id"]
+        or submission.get("batch_id") != enrollment["batch"]["id"]
+        or submission.get("relative_path") != relative_path
+    ):
+        return "Access denied", 403
+    path = portal_storage.submission_path(relative_path)
+    return send_file(path, as_attachment=True) if path else ("File not found", 404)
 
 
 # ---------------------- AI Interview Platform -----------------------------
