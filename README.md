@@ -18,9 +18,7 @@ python app.py
 
 Visit `http://localhost:5000`.
 
-Default passwords (change these — see step 3):
-- Admin: `eds@admin123`
-- Student: `eds@student123`
+
 
 Without any Google setup, admin submissions save to `admissions_local.csv` in the project folder, and student notes links show `#` placeholders. Everything else works out of the box.
 
