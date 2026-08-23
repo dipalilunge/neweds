@@ -5,6 +5,8 @@ from datetime import datetime
 
 from werkzeug.utils import secure_filename
 
+import drive_helper
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BATCHES_FILE = os.path.join(BASE_DIR, "batches.json")
 WORK_DIR = os.path.join(BASE_DIR, "student_work")
@@ -43,6 +45,12 @@ def add_batch(course_id, name, start_date, fee):
         "fee": fee,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
+    course_name = next((course["name"] for course in __import__("config").COURSES if course["id"] == course_id), course_id)
+    drive_details = drive_helper.ensure_batch_drive_folder(course_id, name, batch["id"], course_name)
+    if drive_details.get("success"):
+        batch["drive_folder_id"] = drive_details.get("folder_id", "")
+        batch["drive_folder_url"] = drive_details.get("webViewLink", "")
+        batch["drive_folder_name"] = drive_details.get("name", "")
     batches.append(batch)
     _write_json(BATCHES_FILE, batches)
     return batch

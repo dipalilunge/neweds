@@ -48,10 +48,22 @@
     {% if batches %}
     <div class="table-wrap">
       <table class="dash-table">
-        <thead><tr><th>Batch</th><th>Course</th><th>Start</th><th>Fee</th></tr></thead>
+        <thead><tr><th>Batch</th><th>Course</th><th>Start</th><th>Fee</th><th>Drive Folder</th></tr></thead>
         <tbody>
           {% for b in batches|reverse %}
-          <tr><td>{{ b.name }}</td><td>{{ b.course_id }}</td><td>{{ b.start_date }}</td><td>₹{{ b.fee }}</td></tr>
+          <tr>
+            <td>{{ b.name }}</td>
+            <td>{{ b.course_id }}</td>
+            <td>{{ b.start_date }}</td>
+            <td>₹{{ b.fee }}</td>
+            <td>
+              {% if b.drive_folder_url %}
+              <a href="{{ b.drive_folder_url }}" target="_blank" rel="noopener">Open</a>
+              {% else %}
+              <span>Not configured</span>
+              {% endif %}
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>

@@ -40,7 +40,8 @@ def _try_connect():
     if _sheets_available is False:
         return None
 
-    if not config.ADMISSIONS_SHEET_ID or not os.path.exists(config.GOOGLE_CREDENTIALS_FILE):
+    creds_path = config.GOOGLE_CREDENTIALS_FILE or ""
+    if not config.ADMISSIONS_SHEET_ID or (not creds_path or not os.path.exists(creds_path)):
         _sheets_available = False
         return None
 

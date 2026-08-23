@@ -6,7 +6,44 @@ Google Sheet, and Google Drive folders. Nothing here needs code changes
 elsewhere — the rest of the app reads from this file.
 """
 
+import json
 import os
+import tempfile
+
+
+def _read_streamlit_secret_json():
+    """Read a Google credentials JSON payload from Streamlit Cloud secrets if present."""
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return None
+
+    try:
+        secrets = getattr(st, "secrets", {}) or {}
+        for key in ("google_credentials_json", "EDS_GOOGLE_CREDENTIALS_JSON", "google_credentials"):
+            value = secrets.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+            if isinstance(value, dict):
+                return json.dumps(value)
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_google_credentials_file():
+    """Support runtime credentials from environment/secrets for Streamlit Cloud free hosting."""
+    preferred = os.environ.get("EDS_GOOGLE_CREDENTIALS_FILE", "google_credentials.json")
+    raw_json = os.environ.get("EDS_GOOGLE_CREDENTIALS_JSON") or _read_streamlit_secret_json()
+
+    if raw_json and not os.path.exists(preferred):
+        fd, path = tempfile.mkstemp(prefix="eds-google-creds-", suffix=".json")
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(raw_json)
+        return path
+
+    return preferred
+
 
 # ---------------------------------------------------------------------------
 # Basic app / security settings
@@ -28,10 +65,12 @@ STUDENT_PASSWORD = os.environ.get("EDS_STUDENT_PASSWORD", "eds@student123")
 # 3. Share your admissions Google Sheet with the service account's email
 #    address (Editor access).
 # 4. Put the Sheet's ID (from its URL) below.
-GOOGLE_CREDENTIALS_FILE = os.environ.get(
-    "EDS_GOOGLE_CREDENTIALS_FILE", "google_credentials.json"
+GOOGLE_CREDENTIALS_FILE = _resolve_google_credentials_file()
+GOOGLE_CREDENTIALS_JSON = os.environ.get("EDS_GOOGLE_CREDENTIALS_JSON") or _read_streamlit_secret_json() or ""
+ADMISSIONS_SHEET_ID = os.environ.get(
+    "EDS_ADMISSIONS_SHEET_ID",
+    "1YBCkcWHIPdDpakjIm3J8hB_WRlLT8NxoY6nzde6CtIE",
 )
-ADMISSIONS_SHEET_ID = os.environ.get("EDS_ADMISSIONS_SHEET_ID", "")
 ADMISSIONS_WORKSHEET_NAME = os.environ.get("EDS_ADMISSIONS_WORKSHEET", "Admissions")
 
 # If the sheet isn't configured yet, admissions are saved locally to this
@@ -44,31 +83,31 @@ LOCAL_ADMISSIONS_FALLBACK = "admissions_local.csv"
 # Create one Drive folder per course, set sharing to "Anyone with the link
 # — Viewer", and paste the folder link below against the matching course id.
 DRIVE_NOTES_LINKS = {
-    "python": "https://drive.google.com/drive/folders/1nHtO6avK-hGLZH1zHuX0_Y_I0kyNeeyZ",
+    "python": "https://drive.google.com/drive/folders/1N1rxBf_DQuQXfFQxweU3cRoHU-g42S73",
     "sql": "https://drive.google.com/drive/folders/16AhZkVy4F4360Rc7Q4FTsfcdssw5N4jc",
-    "cpp": "https://drive.google.com/drive/folders/1drD_JO0uxPZ-HfUjyWrBo2qx0ijbv6zX",
-    "java": "https://drive.google.com/drive/folders/REPLACE_WITH_JAVA_FOLDER_ID",
-    "data-science": "https://drive.google.com/drive/folders/1XnnzwkydGI56EGkUDu2R0C8ZS151PDDg",
-    "data-analytics": "https://drive.google.com/drive/folders/1W1_yYnZv6Tf-Vr3dWGvIrmTneVL708CY",
-    "ai": "https://drive.google.com/drive/folders/1ReRBv0hWc_3-wJsT1Zj6UlMR-VYF6rxB",
-    "catia": "https://drive.google.com/drive/folders/REPLACE_WITH_CATIA_FOLDER_ID",
-    "creo": "https://drive.google.com/drive/folders/REPLACE_WITH_CREO_FOLDER_ID",
-    "solidworks": "https://drive.google.com/drive/folders/REPLACE_WITH_SOLIDWORKS_FOLDER_ID",
-    "autocad": "https://drive.google.com/drive/folders/REPLACE_WITH_AUTOCAD_FOLDER_ID",
-    "ug-nx": "https://drive.google.com/drive/folders/REPLACE_WITH_UG_NX_FOLDER_ID",
-    "ansys": "https://drive.google.com/drive/folders/REPLACE_WITH_ANSYS_FOLDER_ID",
-    "mastercam": "https://drive.google.com/drive/folders/REPLACE_WITH_MASTERCAM_FOLDER_ID",
-    "product-designing": "https://drive.google.com/drive/folders/REPLACE_WITH_PRODUCT_DESIGNING_FOLDER_ID",
-    "c-programming": "https://drive.google.com/drive/folders/REPLACE_WITH_C_FOLDER_ID",
-    "generative-ai": "https://drive.google.com/drive/folders/REPLACE_WITH_GENERATIVE_AI_FOLDER_ID",
-    "full-stack-python": "https://drive.google.com/drive/folders/REPLACE_WITH_FULL_STACK_PYTHON_FOLDER_ID",
-    "web-development": "https://drive.google.com/drive/folders/REPLACE_WITH_WEB_DEVELOPMENT_FOLDER_ID",
-    "autocad-civil": "https://drive.google.com/drive/folders/REPLACE_WITH_AUTOCAD_CIVIL_FOLDER_ID",
-    "revit-architecture": "https://drive.google.com/drive/folders/REPLACE_WITH_REVIT_FOLDER_ID",
-    "sketch-up": "https://drive.google.com/drive/folders/REPLACE_WITH_SKETCH_UP_FOLDER_ID",
-    "v-ray": "https://drive.google.com/drive/folders/REPLACE_WITH_V_RAY_FOLDER_ID",
-    "electrical-cad": "https://drive.google.com/drive/folders/REPLACE_WITH_ELECTRICAL_CAD_FOLDER_ID",
-    "plc-programming": "https://drive.google.com/drive/folders/REPLACE_WITH_PLC_FOLDER_ID",
+    "cpp": "https://drive.google.com/drive/folders/1c7_kIYGTxFv4leskldqOq9BAkH0YdiWt",
+    "java": "https://drive.google.com/drive/folders/1SJY96Ov4wsJCIxwebZY-FTWVxZt15b6o",
+    "data-science": "https://drive.google.com/drive/folders/1UkXPPWVpvGz2Hgo1Nm_avnJqUNxPoz1g",
+    "data-analytics": "https://drive.google.com/drive/folders/1x_UXVS8sYO8m4KnZmScR-CikxJM7U3AG",
+    "ai": "https://drive.google.com/drive/folders/1UsGaBNtP4V8kPb5UtGHohQV2p_Nweyiv",
+    "catia": "https://drive.google.com/drive/folders/1OjXQrIi9CgAoLZH62lDNoq9gLggqe3aM",
+    "creo": "https://drive.google.com/drive/folders/1-Ch7KuJ4wGhRLhOtfTSJ29l_RpSnAV_X",
+    "solidworks": "https://drive.google.com/drive/folders/1tuWqYKHobwhOb7wMO8NHPiFO7qTjP5G2",
+    "autocad": "https://drive.google.com/drive/folders/1nbHUUgxhL_f8drEryB5FFupwBxU4XnI7",
+    "ug-nx": "https://drive.google.com/drive/folders/1zKcSM2Pvo2Eu7v2WXs78eXwlcSQagmBB",
+    "ansys": "https://drive.google.com/drive/folders/1P1EhvJczqdYbqfnpCku9Prh6fZsdHvRc",
+    "mastercam": "https://drive.google.com/drive/folders/1dT9J92l9mSJl4dW_uqSPfHzOQhLorPvk",
+    "product-designing": "https://drive.google.com/drive/folders/1rZVC_iXBjFJnhzlQiyQ0bWKs6csd7ed8",
+    "c-programming": "https://drive.google.com/drive/folders/1LcTSxcSh3G-CwhRwX1NxeCzwgj3G8Cp8",
+    "generative-ai": "https://drive.google.com/drive/folders/1UsGaBNtP4V8kPb5UtGHohQV2p_Nweyiv",
+    "full-stack-python": "https://drive.google.com/drive/folders/1O1uMC-MOhFsUgr9S7j3BQ49OJXP6FyhH",
+    "web-development": "https://drive.google.com/drive/folders/1hhwMM48ZlOqowHof9eTpO5z7HRZh-j81",
+    "autocad-civil": "https://drive.google.com/drive/folders/1p5vHFM63iYTLQm3j2sk-V-oUt7-PXFBy",
+    "revit-architecture": "https://drive.google.com/drive/folders/1Pl0Wp1TpYgil4jLYZl-eZYz04r2mgh1N",
+    "sketch-up": "https://drive.google.com/drive/folders/1s9IAnYyeOpId8ybCFjUh-lrKUnfWMlRd",
+    "v-ray": "https://drive.google.com/drive/folders/1lRasPQGLZLuP6F7R7vZFUxY5UjtvkL1A",
+    "electrical-cad": "https://drive.google.com/drive/folders/1-FFxX_k4nj0H8A28s1Q2X3LNGCjLRfHe",
+    "plc-programming": "https://drive.google.com/drive/folders/1A-9ql8HkYMrdrjZSxhXyFlrTMdNoK7QQ",
 }
 
 # Optional: folder ID in Google Drive where interview recordings will be uploaded.

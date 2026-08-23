@@ -1,7 +1,103 @@
-import os
 import io
+import os
+import re
 
 import config
+
+
+def extract_drive_folder_id(url):
+    """Return the Google Drive folder ID from a standard Drive URL."""
+    if not url:
+        return ""
+    patterns = [
+        r"/drive/folders/([A-Za-z0-9_-]+)",
+        r"/folders/([A-Za-z0-9_-]+)",
+        r"[?&]id=([A-Za-z0-9_-]+)",
+        r"/file/d/([A-Za-z0-9_-]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def build_batch_folder_name(course_name, batch_name):
+    """Create a readable folder name for a batch under a course folder."""
+    course_label = (course_name or "Course").strip()
+    batch_label = (batch_name or "Batch").strip()
+    if not course_label:
+        return batch_label
+    if not batch_label:
+        return course_label
+    return f"{course_label} - {batch_label}"
+
+
+def get_course_drive_folder_url(course_id):
+    return config.DRIVE_NOTES_LINKS.get(course_id, "")
+
+
+def ensure_batch_drive_folder(course_id, batch_name, batch_id, course_name=None):
+    """Create (or reuse) a batch subfolder inside the configured course folder."""
+    parent_url = get_course_drive_folder_url(course_id)
+    parent_id = extract_drive_folder_id(parent_url)
+    if not parent_url or not parent_id:
+        return {"success": False, "folder_id": "", "webViewLink": "", "message": "No Drive folder configured for this course."}
+
+    creds_file = os.path.abspath(config.GOOGLE_CREDENTIALS_FILE or "")
+    if not os.path.exists(creds_file):
+        return {"success": False, "folder_id": "", "webViewLink": "", "message": "Google Drive credentials are not configured."}
+
+    try:
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+
+        scopes = ["https://www.googleapis.com/auth/drive.file"]
+        creds = Credentials.from_service_account_file(creds_file, scopes=scopes)
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+        folder_name = build_batch_folder_name(course_name or course_id, batch_name)
+        safe_name = folder_name.replace("'", "\\'")
+        query = (
+            f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' "
+            f"and trashed=false and name = '{safe_name}'"
+        )
+        response = service.files().list(
+            q=query,
+            spaces="drive",
+            fields="files(id,name,webViewLink)",
+            pageSize=10,
+        ).execute()
+        items = response.get("files") or []
+        if items:
+            folder = items[0]
+            return {
+                "success": True,
+                "folder_id": folder.get("id", ""),
+                "webViewLink": folder.get("webViewLink", ""),
+                "name": folder_name,
+            }
+
+        file_metadata = {
+            "name": folder_name,
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": [parent_id],
+        }
+        folder = service.files().create(body=file_metadata, fields="id,name,webViewLink").execute()
+        return {
+            "success": True,
+            "folder_id": folder.get("id", ""),
+            "webViewLink": folder.get("webViewLink", ""),
+            "name": folder_name,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "folder_id": "",
+            "webViewLink": "",
+            "name": build_batch_folder_name(course_name or course_id, batch_name),
+            "error": str(exc),
+        }
 
 
 def _save_locally(src_path, filename):
