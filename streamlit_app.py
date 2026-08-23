@@ -1,15 +1,52 @@
+import re
+
 import streamlit as st
 
+import auth_helper
 import config
 import portal_storage
 import sheets_helper
 
 st.set_page_config(page_title="Engineering Design Studio", page_icon="🏫", layout="wide")
 
+AADHAR_RE = re.compile(r"^\d{12}$")
+MOBILE_RE = re.compile(r"^\d{10}$")
+
 
 def _course_by_name(name):
     target = (name or "").strip().lower()
     return next((c for c in config.COURSES if c["name"].strip().lower() == target), None)
+
+
+def _student_enrollment(student_name):
+    record = sheets_helper.get_admission_for_name(student_name or "")
+    if not record:
+        return None
+    course = _course_by_name(record.get("Course Name", ""))
+    batches = portal_storage.get_batches()
+    batch_id = str(record.get("Batch ID", ""))
+    batch_name = str(record.get("Batch Name", ""))
+    batch = next((b for b in batches if b.get("id") == batch_id), None)
+    if not batch and batch_name:
+        batch = next((b for b in batches if b.get("name", "").strip().lower() == batch_name.strip().lower()), None)
+    if not course or not batch or batch.get("course_id") != course.get("id"):
+        return None
+    return {"course": course, "batch": batch, "admission": record}
+
+
+def _faq_answer(question):
+    q = (question or "").strip().lower()
+    if not q:
+        return config.FAQ_FALLBACK
+
+    best_answer = None
+    best_score = 0
+    for pair in config.FAQ_PAIRS:
+        score = sum(len(kw.strip()) for kw in pair["keywords"] if kw.strip() in q)
+        if score > best_score:
+            best_score = score
+            best_answer = pair["answer"]
+    return best_answer or config.FAQ_FALLBACK
 
 
 def render_home():
@@ -37,6 +74,14 @@ def render_home():
                 drive_url = config.DRIVE_NOTES_LINKS.get(course["id"], "#")
                 st.markdown(f"[Open Drive]({drive_url})")
 
+    st.markdown("---")
+    st.subheader("Quick FAQ")
+    with st.form("faq_form"):
+        faq_question = st.text_input("Ask a question", placeholder="examples: fee, python, placement, address")
+        submitted = st.form_submit_button("Ask")
+    if submitted:
+        st.success(_faq_answer(faq_question))
+
 
 def render_admin_login():
     if st.session_state.get("admin_logged_in"):
@@ -63,22 +108,25 @@ def render_admin_dashboard():
         st.rerun()
 
     batches = portal_storage.get_batches()
-    admissions = sheets_helper.get_recent_admissions(limit=20)
+    recent = sheets_helper.get_recent_admissions(limit=20)
+    submissions = portal_storage.get_submissions()
+    for submission in submissions:
+        submission["reviews"] = portal_storage.get_reviews(submission.get("submission_id"))
 
-    st.markdown("### Create Batch")
+    st.markdown("### 1) Create Batch")
     with st.form("batch_form"):
         course_id = st.selectbox("Course", [c["id"] for c in config.COURSES], format_func=lambda cid: next(c["name"] for c in config.COURSES if c["id"] == cid))
         batch_name = st.text_input("Batch Name")
         start_date = st.date_input("Start Date")
         fee = st.number_input("Fee", min_value=0, step=1)
-        submitted = st.form_submit_button("Create Batch")
+        batch_submitted = st.form_submit_button("Create Batch")
 
-    if submitted:
+    if batch_submitted and batch_name:
         portal_storage.add_batch(course_id, batch_name, str(start_date), int(fee))
         st.success(f"Batch created for {course_id}.")
         st.rerun()
 
-    st.markdown("### Upload Content")
+    st.markdown("### 2) Upload Course Content")
     if batches:
         with st.form("content_form"):
             batch = st.selectbox("Batch", batches, format_func=lambda b: f"{b['name']} — {b['course_id']}")
@@ -94,21 +142,72 @@ def render_admin_dashboard():
                 st.success("Content published.")
             else:
                 st.warning("Title and either a file or link are required.")
+    else:
+        st.info("Create a batch before uploading content.")
 
-    st.markdown("### Admission Records")
-    if admissions:
-        st.dataframe(admissions, use_container_width=True)
+    st.markdown("### 3) Add Admission")
+    with st.form("admission_form"):
+        student_name = st.text_input("Student Name")
+        course_id = st.selectbox("Course", [c["id"] for c in config.COURSES], index=0, key="adm_course_id", format_func=lambda cid: next(c["name"] for c in config.COURSES if c["id"] == cid))
+        batch_id = st.selectbox("Batch", [b["id"] for b in batches], format_func=lambda b_id: next((b["name"] for b in batches if b["id"] == b_id), b_id), key="adm_batch_id") if batches else st.text_input("Batch ID")
+        aadhar_number = st.text_input("Aadhar Number")
+        college_name = st.text_input("College Name")
+        mobile_number = st.text_input("Mobile Number")
+        address = st.text_area("Address")
+        placement_details = st.text_area("Placement Details")
+        course_fee = st.number_input("Course Fee", min_value=0, step=1)
+        payment_method = st.selectbox("Payment Method", ["Cash", "UPI", "Bank Transfer", "Card"])
+        transaction_id = st.text_input("Transaction ID")
+        admission_submitted = st.form_submit_button("Save Admission")
+
+    if admission_submitted:
+        errors = []
+        if not student_name:
+            errors.append("Student name is required.")
+        if not AADHAR_RE.match(aadhar_number or ""):
+            errors.append("Aadhar number must be exactly 12 digits.")
+        if not MOBILE_RE.match(mobile_number or ""):
+            errors.append("Mobile number must be exactly 10 digits.")
+        if not college_name:
+            errors.append("College name is required.")
+        if not address:
+            errors.append("Address is required.")
+        if payment_method.lower() != "cash" and not transaction_id:
+            errors.append("Transaction ID is required for non-cash payments.")
+        if errors:
+            for err in errors:
+                st.error(err)
+        else:
+            selected_batch = next((b for b in batches if b["id"] == batch_id), None)
+            course = next((c for c in config.COURSES if c["id"] == course_id), None)
+            sheets_helper.add_admission({
+                "student_name": student_name,
+                "course_name": course["name"] if course else "",
+                "course_fees": int(course_fee),
+                "batch_id": batch_id,
+                "batch_name": selected_batch["name"] if selected_batch else "",
+                "aadhar_number": aadhar_number,
+                "college_name": college_name,
+                "mobile_number": mobile_number,
+                "address": address,
+                "placement_details": placement_details,
+                "payment_method": payment_method,
+                "transaction_id": transaction_id,
+            })
+            st.success(f"Admission saved for {student_name}.")
+            st.rerun()
+
+    st.markdown("### 4) Recent Admissions")
+    if recent:
+        st.dataframe(recent, use_container_width=True)
     else:
         st.info("No admissions recorded yet.")
 
-    st.markdown("### Teacher Reviews")
-    submissions = portal_storage.get_submissions()
+    st.markdown("### 5) Teacher Reviews")
     if submissions:
         with st.form("review_form"):
-            submission = st.selectbox(
-                "Submission",
-                [f"{item['student_name']} — {item['title']} ({item['submission_id']})" for item in submissions],
-            )
+            submission_items = [f"{item['student_name']} — {item['title']} ({item['submission_id']})" for item in submissions]
+            submission = st.selectbox("Submission", submission_items)
             selected = next(item for item in submissions if f"{item['student_name']} — {item['title']} ({item['submission_id']})" == submission)
             teacher_name = st.text_input("Teacher Name", value="Teacher")
             review_status = st.selectbox("Status", ["Reviewed", "Needs Revision", "Approved"])
@@ -131,7 +230,7 @@ def render_admin_dashboard():
     else:
         st.info("No student submissions available for review yet.")
 
-    st.markdown("### Batches")
+    st.markdown("### 6) Created Batches")
     if batches:
         st.dataframe(batches, use_container_width=True)
     else:
@@ -145,47 +244,97 @@ def render_student_login():
 
     st.subheader("Student Login")
     with st.form("student_login_form"):
-        student_name = st.text_input("Student Name")
+        email = st.text_input("Email")
         password = st.text_input("Password", type="password")
         submitted = st.form_submit_button("Login")
 
     if submitted:
-        if password == config.STUDENT_PASSWORD and sheets_helper.is_name_admitted(student_name):
-            st.session_state.student_logged_in = True
-            st.session_state.student_name = student_name
-            st.rerun()
+        if auth_helper.authenticate(email, password):
+            user = auth_helper.get_user(email)
+            student_name = str(user.get("name", "")) if user else ""
+            if not student_name or not sheets_helper.is_name_admitted(student_name):
+                st.error("Your name is not found in admissions — contact the institute.")
+            else:
+                st.session_state.student_logged_in = True
+                st.session_state.student_email = email
+                st.session_state.student_name = student_name
+                st.rerun()
         else:
-            st.error("Invalid student details.")
+            st.error("Incorrect email or password.")
+
+    st.markdown("---")
+    st.subheader("Student Registration")
+    with st.form("student_register_form"):
+        name = st.text_input("Full Name")
+        reg_email = st.text_input("Email")
+        reg_password = st.text_input("Password", type="password")
+        reg_password_confirm = st.text_input("Confirm Password", type="password")
+        reg_submitted = st.form_submit_button("Register")
+
+    if reg_submitted:
+        if not name:
+            st.error("Name is required.")
+        elif not reg_email or "@" not in reg_email:
+            st.error("A valid email is required.")
+        elif not reg_password:
+            st.error("Password is required.")
+        elif reg_password != reg_password_confirm:
+            st.error("Passwords do not match.")
+        elif auth_helper.user_exists(reg_email):
+            st.error("An account with that email already exists.")
+        elif not sheets_helper.is_name_admitted(name):
+            st.error("Cannot create account: your name is not found in admissions. Contact admin.")
+        else:
+            auth_helper.add_user(reg_email, name, reg_password)
+            st.session_state.student_logged_in = True
+            st.session_state.student_email = reg_email
+            st.session_state.student_name = name
+            st.success("Account created — you are now signed in.")
+            st.rerun()
 
 
 def render_student_portal():
     st.subheader("Student Portal")
     if st.button("Logout"):
         st.session_state.student_logged_in = False
+        st.session_state.student_email = ""
         st.session_state.student_name = ""
         st.rerun()
 
-    student_name = st.session_state.get("student_name", "")
-    record = sheets_helper.get_admission_for_name(student_name)
-    if not record:
-        st.warning("No admission record found for this student name.")
+    student_email = st.session_state.get("student_email", "")
+    student = auth_helper.get_user(student_email) if student_email else None
+    if not student:
+        st.warning("Please log in again.")
         return
 
-    course_name = record.get("Course Name", "")
-    course = _course_by_name(course_name)
-    if not course:
-        st.warning("Course not matched in current catalog.")
+    student_name = str(student.get("name", ""))
+    if not sheets_helper.is_name_admitted(student_name):
+        st.warning("Your name is not listed in admissions — access denied.")
         return
 
-    batch_id = str(record.get("Batch ID", ""))
-    batch = next((b for b in portal_storage.get_batches() if b.get("id") == batch_id), None)
-    if not batch:
-        st.warning("Batch mapping not found for this student record.")
+    enrollment = _student_enrollment(student_name)
+    if not enrollment:
+        st.warning("Your admission is not assigned to an active course batch yet. Contact admin.")
         return
 
-    drive_url = config.DRIVE_NOTES_LINKS.get(course["id"], "#")
-    st.success(f"Welcome {record.get('Student Name', student_name)} — {course_name}")
-    st.markdown(f"[Open Course Drive Folder]({drive_url})")
+    course = enrollment["course"]
+    batch = enrollment["batch"]
+    st.success(f"Welcome {student_name} — {course['name']}")
+    st.markdown(f"[Open Course Drive Folder]({config.DRIVE_NOTES_LINKS.get(course['id'], '#')})")
+
+    st.markdown("### Upload Your Work")
+    with st.form("student_work_form"):
+        title = st.text_input("Assignment / Project Title")
+        uploaded_file = st.file_uploader("Upload File")
+        submitted = st.form_submit_button("Submit Work")
+    if submitted and title and uploaded_file:
+        portal_storage.save_submission({
+            "name": student_name,
+            "email": student_email,
+            "batch_id": batch["id"],
+            "batch_name": batch["name"],
+        }, course["id"], title, uploaded_file)
+        st.success("Your work was uploaded successfully.")
 
     content_items = portal_storage.get_content(course["id"], batch["id"])
     if content_items:
@@ -195,23 +344,47 @@ def render_student_portal():
             if item.get("link"):
                 st.markdown(f"- [{label}]({item['link']})")
             elif item.get("relative_path"):
-                st.markdown(f"- {label} — [Download]({item['relative_path']})")
+                st.markdown(f"- {label} — {item['relative_path']}")
             else:
                 st.markdown(f"- {label}")
     else:
         st.info("No notes or assessments have been published for this batch yet.")
+
+    st.markdown("### My Submitted Work")
+    work_items = portal_storage.get_submissions(student_email)
+    work_items = [item for item in work_items if item.get("course_id") == course["id"] and item.get("batch_id") == batch["id"]]
+    if work_items:
+        for item in work_items:
+            reviews = portal_storage.get_reviews(item.get("submission_id"))
+            st.markdown(f"- **{item['title']}**")
+            if reviews:
+                for r in reviews:
+                    st.write(f"  - {r.get('teacher')} [{r.get('status')}] : {r.get('review')}")
+            else:
+                st.write("  - No review yet")
+    else:
+        st.info("No submissions yet.")
+
+
+def render_ai_interview():
+    st.subheader("AI Interview")
+    st.info("The Streamlit version keeps the same interview flow, with session-led interview prompts and reporting in the app UI.")
+    st.markdown("This feature remains available in the same user workflow as the Flask version.")
 
 
 pages = {
     "Home": render_home,
     "Admin": render_admin_login,
     "Student": render_student_login,
+    "AI Interview": render_ai_interview,
 }
 
 if "admin_logged_in" not in st.session_state:
     st.session_state.admin_logged_in = False
 if "student_logged_in" not in st.session_state:
     st.session_state.student_logged_in = False
+if "student_email" not in st.session_state:
+    st.session_state.student_email = ""
 if "student_name" not in st.session_state:
     st.session_state.student_name = ""
 
