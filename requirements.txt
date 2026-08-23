@@ -2,5 +2,5 @@ Flask==3.0.3
 gspread==6.1.2
 google-auth==2.32.0
 requests==2.31.0
-streamlit==1.37.1
+streamlit==1.62.0
 pillow==11.3.0
