@@ -64,6 +64,15 @@ All editable content — address, phone, email, hours, course list, fees, placem
 
 For real use, run behind a production WSGI server (e.g. `gunicorn app:app`) rather than `python app.py`, put it behind HTTPS, and set the environment variables from step 4. Consider giving each course batch its own student password if you want tighter access control.
 
+### Deploy on Render
+
+1. Push this folder to GitHub and create a new **Blueprint** in Render, selecting the repository. Render will read `render.yaml` and create the web service.
+2. In the service environment, enter values for `EDS_ADMIN_PASSWORD`, `EDS_STUDENT_PASSWORD`, and `EDS_ADMISSIONS_SHEET_ID`.
+3. Set `EDS_GOOGLE_CREDENTIALS_JSON` to the complete contents of the Google service-account JSON key. Do not commit the key file.
+4. Deploy. Render provides the `PORT` value automatically, and the configured Gunicorn command binds to it.
+
+The default Render filesystem is ephemeral. Google Sheets remains the admissions source, but locally stored users, batches, course uploads, interview recordings, and fallback CSV data can disappear on redeploy. Use a Render persistent disk or move that storage to a database/object store before relying on it for production records.
+
 ## Project structure
 
 ```
