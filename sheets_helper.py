@@ -61,14 +61,32 @@ def _try_connect():
         try:
             worksheet = spreadsheet.worksheet(config.ADMISSIONS_WORKSHEET_NAME)
         except gspread.exceptions.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet(
-                title=config.ADMISSIONS_WORKSHEET_NAME, rows=1000, cols=len(FIELDNAMES)
-            )
-            worksheet.append_row(FIELDNAMES)
+            # Imported CSV files often keep the default tab name (for example,
+            # Sheet1). Use the existing first tab rather than silently writing
+            # admissions into a newly-created, unexpected tab.
+            worksheets = spreadsheet.worksheets()
+            if worksheets:
+                worksheet = worksheets[0]
+                print(
+                    f"[sheets_helper] Worksheet {config.ADMISSIONS_WORKSHEET_NAME!r} not found; "
+                    f"using existing tab {worksheet.title!r}. Set EDS_ADMISSIONS_WORKSHEET to change it."
+                )
+            else:
+                worksheet = spreadsheet.add_worksheet(
+                    title=config.ADMISSIONS_WORKSHEET_NAME, rows=1000, cols=len(FIELDNAMES)
+                )
 
-        # Make sure header row exists.
-        if worksheet.row_values(1) != FIELDNAMES:
+        # Add headers only to a blank sheet. Never overwrite an existing CSV's
+        # header row, because that could damage the user's existing structure.
+        header = worksheet.row_values(1)
+        if not header:
             worksheet.update("A1", [FIELDNAMES])
+        elif header != FIELDNAMES:
+            raise RuntimeError(
+                f"Admissions worksheet {worksheet.title!r} has different headers. "
+                "Set EDS_ADMISSIONS_WORKSHEET to the correct tab or align its header row "
+                "with the admissions fields before collecting submissions."
+            )
 
         _sheet_cache = worksheet
         _sheets_available = True

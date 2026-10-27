@@ -20,8 +20,9 @@
     <img src="{{ url_for('static', filename='images/logo.jpeg') }}" alt="{{ institute.name }} logo">
     <span>{{ institute.name }}</span>
   </a>
-  <nav class="nav__links">
+  <nav class="nav__links" aria-label="Main navigation">
     <a href="#courses">Courses</a>
+    <a href="#services">Services</a>
     <a href="#contact">Contact</a>
     <a href="{{ url_for('student_login') }}">Student portal</a>
     <a class="nav__cta" href="{{ url_for('admin_login') }}">Admin</a>
@@ -126,6 +127,73 @@
     </div>
   </div>
 
+</section>
+
+<section class="services" id="services">
+  <div class="services__intro">
+    <p class="section-label">— What We Do —</p>
+    <h2>Services built around your next step.</h2>
+    <p>From finding the right technical talent to building digital products, we help individuals and businesses move forward.</p>
+  </div>
+  <div class="services__groups">
+    <div class="services__group">
+      <div class="services__group-head">
+        <span class="services__eyebrow">01 / People &amp; Careers</span>
+        <h3>HR Services</h3>
+        <p>Connecting employers with talent and helping candidates find practical opportunities.</p>
+      </div>
+      <div class="services__cards">
+        <article class="service-card"><span class="service-card__number">HR.01</span><h4>Technical Recruitment</h4><p>Recruitment support for technical roles, with a focus on skills and role fit.</p></article>
+        <article class="service-card"><span class="service-card__number">HR.02</span><h4>Internships</h4><p>Internship coordination and practical learning opportunities for aspiring professionals.</p></article>
+        <article class="service-card"><span class="service-card__number">HR.03</span><h4>Manpower Consulting</h4><p>Workforce planning and hiring support tailored to your team requirements.</p></article>
+      </div>
+    </div>
+    <div class="services__group services__group--it">
+      <div class="services__group-head">
+        <span class="services__eyebrow">02 / Digital Solutions</span>
+        <h3>IT Services</h3>
+        <p>Technology services from idea and research through development and configuration.</p>
+      </div>
+      <div class="services__cards">
+        <article class="service-card"><span class="service-card__number">IT.01</span><h4>Web Development</h4><p>Responsive websites and web applications designed around your goals.</p></article>
+        <article class="service-card"><span class="service-card__number">IT.02</span><h4>Android Development</h4><p>Android applications with user-focused interfaces and useful features.</p></article>
+        <article class="service-card"><span class="service-card__number">IT.03</span><h4>Data Science</h4><p>Data analysis, machine learning prototypes, dashboards and insights.</p></article>
+        <article class="service-card"><span class="service-card__number">IT.04</span><h4>Research &amp; Development</h4><p>Technical research, proof-of-concept development and solution prototyping.</p></article>
+        <article class="service-card"><span class="service-card__number">IT.05</span><h4>Google Sheets Setup</h4><p>Sheet configuration, formulas, data validation, reports and workflow automation.</p></article>
+      </div>
+    </div>
+  </div>
+  <div class="services__enquiry">
+    <div class="services__enquiry-copy">
+      <p class="section-label">— Start a Conversation —</p>
+      <h3>Tell us what you need.</h3>
+      <p>Share a few details and our team will get in touch. Enquiries are saved to our service enquiries spreadsheet when Google Sheets access is configured.</p>
+    </div>
+    <form class="service-form" action="{{ url_for('service_enquiry') }}" method="post">
+      <div class="service-form__grid">
+        <label>Name <input type="text" name="name" maxlength="120" required autocomplete="name" placeholder="Your full name"></label>
+        <label>Email <input type="email" name="email" maxlength="254" autocomplete="email" placeholder="you@example.com"></label>
+        <label>Phone <input type="tel" name="phone" maxlength="20" autocomplete="tel" placeholder="Your contact number"></label>
+        <label>Service category
+          <select name="category" required>
+            <option value="">Choose a category</option><option value="HR Services">HR Services</option><option value="IT Services">IT Services</option>
+          </select>
+        </label>
+        <label class="service-form__wide">Service required
+          <select name="service" required>
+            <option value="">Choose a service</option>
+            <optgroup label="HR Services"><option>Technical Recruitment</option><option>Internships</option><option>Manpower Consulting</option></optgroup>
+            <optgroup label="IT Services"><option>Web Development</option><option>Android Development</option><option>Data Science</option><option>Research &amp; Development</option><option>Google Sheets Setup &amp; Configuration</option></optgroup>
+          </select>
+        </label>
+        <label class="service-form__wide">Tell us more (optional)
+          <textarea name="message" rows="4" maxlength="3000" placeholder="Briefly describe your requirement..."></textarea>
+        </label>
+      </div>
+      <p class="service-form__hint">Please provide either an email address or a phone number.</p>
+      <button class="btn btn--primary" type="submit">Submit enquiry <span aria-hidden="true">↗</span></button>
+    </form>
+  </div>
 </section>
 
 <section class="contact" id="contact">

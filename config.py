@@ -32,11 +32,26 @@ def _read_streamlit_secret_json():
 
 
 def _resolve_google_credentials_file():
-    """Support runtime credentials from environment/secrets for Streamlit Cloud free hosting."""
+    """Resolve Google service-account credentials for Render or local development.
+
+    Render should use EDS_GOOGLE_CREDENTIALS_JSON as a secret environment
+    variable. Local development can use EDS_GOOGLE_CREDENTIALS_FILE or the
+    default google_credentials.json file.
+    """
     preferred = os.environ.get("EDS_GOOGLE_CREDENTIALS_FILE", "google_credentials.json")
     raw_json = os.environ.get("EDS_GOOGLE_CREDENTIALS_JSON") or _read_streamlit_secret_json()
 
-    if raw_json and not os.path.exists(preferred):
+    if raw_json and raw_json.strip():
+        # Accept either raw JSON or a JSON string stored with escaped newlines.
+        raw_json = raw_json.strip()
+        try:
+            parsed = json.loads(raw_json)
+            raw_json = json.dumps(parsed)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "EDS_GOOGLE_CREDENTIALS_JSON is not valid service-account JSON. "
+                "Paste the complete contents of the downloaded service-account JSON file."
+            ) from exc
         fd, path = tempfile.mkstemp(prefix="eds-google-creds-", suffix=".json")
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(raw_json)
@@ -72,6 +87,14 @@ ADMISSIONS_SHEET_ID = os.environ.get(
     "1YBCkcWHIPdDpakjIm3J8hB_WRlLT8NxoY6nzde6CtIE",
 )
 ADMISSIONS_WORKSHEET_NAME = os.environ.get("EDS_ADMISSIONS_WORKSHEET", "Admissions")
+
+# Public website service enquiry form (separate from student admissions).
+SERVICES_SHEET_ID = os.environ.get(
+    "EDS_SERVICES_SHEET_ID",
+    "1RVHEUbSoEpmUX3u3JIjcRI8uPt3O2VBCVvkU26yIjpM",
+)
+SERVICES_WORKSHEET_NAME = os.environ.get("EDS_SERVICES_WORKSHEET", "Service Inquiries")
+LOCAL_SERVICE_INQUIRIES_FALLBACK = "service_inquiries_local.csv"
 
 # If the sheet isn't configured yet, admissions are saved locally to this
 # CSV file instead, so the form still works during setup/demo.
@@ -390,6 +413,13 @@ FAQ_PAIRS = [
     {
         "keywords": ["notes", "material", "resources"],
         "answer": "Enrolled students can access course notes on the Student page using the password shared by their instructor.",
+    },    {
+        "keywords": ["hr services", "technical recruitment", "internship", "manpower consulting"],
+        "answer": "Our HR services include technical recruitment, internship support and manpower consulting. Use the Services enquiry form and our team will contact you.",
+    },
+    {
+        "keywords": ["web development", "android development", "google sheets", "research and development", "research", "it services"],
+        "answer": "Our IT services include web development, Android app development, data science, research and development, and Google Sheets setup and configuration. Submit the Services enquiry form to discuss your requirement.",
     },
 ]
 FAQ_FALLBACK = "I don't have an answer for that yet — please call us at +91 98765 43210 or email info@engineeringdesignstudio.in and our team will help directly."

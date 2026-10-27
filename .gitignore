@@ -8,3 +8,7 @@ users.json
 batches.json
 student_work/
 course_content/
+
+service_inquiries_local.csv
+*.json.key
+eds-google-creds-*.json

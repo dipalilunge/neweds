@@ -2,7 +2,7 @@
 
 A Flask + HTML/CSS site for the institute, with:
 
-- **Homepage** — notifications ticker, courses (IT/software + mechanical CAD tracks), placement stats, address/contact with an embedded map, and a static keyword-based FAQ assistant (no external AI API — just a chat widget answering from `config.FAQ_PAIRS`).
+- **Homepage** — courses, HR and IT service cards, a service enquiry form, address/contact with an embedded map, and a keyword-based FAQ assistant.
 - **Admin dashboard** (`/admin`) — password-protected form to record admissions (student name, course, fee, Aadhar number, college, mobile, address, placement details), written straight to a Google Sheet. Falls back to a local CSV automatically if Sheets isn't configured yet, so it's usable immediately.
 - **Student portal** (`/student`) — password-protected page listing every course with a button that opens that course's Google Drive notes folder in a new tab.
 
@@ -32,19 +32,30 @@ Without any Google setup, admin submissions save to `admissions_local.csv` in th
 4. Create a Google Sheet for admissions. Share it with the service account's email address (found inside the JSON file, looks like `xxxx@xxxx.iam.gserviceaccount.com`) with **Editor** access.
 5. Copy the Sheet ID from its URL:
    `https://docs.google.com/spreadsheets/d/`**`THIS_PART_IS_THE_ID`**`/edit`
-6. Open `config.py` and set:
+6. The project is preconfigured with your admissions spreadsheet ID (`1YBCkcWHIPdDpakjIm3J8hB_WRlLT8NxoY6nzde6CtIE`). If you deploy on Render, ensure `EDS_ADMISSIONS_SHEET_ID` is set to this same ID. The worksheet tab defaults to `Admissions`; set `EDS_ADMISSIONS_WORKSHEET` if your tab has a different name. To change the ID manually, open `config.py` and set:
    ```python
-   ADMISSIONS_SHEET_ID = "paste-the-id-here"
+   ADMISSIONS_SHEET_ID = "1YBCkcWHIPdDpakjIm3J8hB_WRlLT8NxoY6nzde6CtIE"
    ```
 7. Restart the app. The admin dashboard header will show "Synced to Google Sheets" once it connects successfully; if credentials are missing or wrong it silently falls back to the local CSV and prints a note in the terminal.
 
-## 3. Connect Google Drive (course notes)
+## 3. Connect Google Sheets (service enquiries)
+
+The service enquiry form is configured to use the spreadsheet ID supplied for this project, with a separate worksheet named `Service Inquiries`. It does not replace or change the admissions spreadsheet. To enable writes, share that spreadsheet with the same Google service-account email used by the app, granting **Editor** access. Configure `EDS_GOOGLE_CREDENTIALS_JSON` (recommended on Render) or place the service-account key in `google_credentials.json`. The app creates the `Service Inquiries` worksheet and header row if needed. If Google credentials are not configured or the sheet is inaccessible, submissions are stored in `service_inquiries_local.csv` as a local fallback. On Render's default ephemeral filesystem, that fallback is not durable across redeploys.
+
+Optional environment variables:
+
+```bash
+EDS_SERVICES_SHEET_ID=1RVHEUbSoEpmUX3u3JIjcRI8uPt3O2VBCVvkU26yIjpM
+EDS_SERVICES_WORKSHEET="Service Inquiries"
+```
+
+## 4. Connect Google Drive (course notes)
 
 1. Create one Drive folder per course (Python, SQL, C++, Java, Data Science, Data Analytics, AI, CATIA, Creo, SolidWorks, AutoCAD).
 2. Set each folder's sharing to **"Anyone with the link — Viewer"** (or share individually with students, if you'd rather keep them private).
 3. Copy each folder's link and paste it into `config.py` inside `DRIVE_NOTES_LINKS`, matching the course `id` keys already listed there.
 
-## 4. Change the passwords and secret key
+## 5. Change the passwords and secret key
 
 Set these as environment variables before running in anything other than a local demo:
 
@@ -56,11 +67,11 @@ export EDS_STUDENT_PASSWORD="something-shared-with-enrolled-students"
 
 Or edit the defaults directly in `config.py`.
 
-## 5. Edit institute details, courses and FAQ answers
+## 6. Edit institute details, courses and FAQ answers
 
 All editable content — address, phone, email, hours, course list, fees, placement stats, notification banner text, and FAQ answers — lives in `config.py`. No template or Python logic needs to change to update any of it.
 
-## 6. Deploying
+## 7. Deploying
 
 For real use, run behind a production WSGI server (e.g. `gunicorn app:app`) rather than `python app.py`, put it behind HTTPS, and set the environment variables from step 4. Consider giving each course batch its own student password if you want tighter access control.
 

@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 
 import config
 import sheets_helper
+import services_helper
 import auth_helper
 import ai_helper
 from interview_engine import engine as interview_engine
@@ -67,6 +68,35 @@ def home():
         civil_courses=civil_courses,
         electrical_courses=electrical_courses,
     )
+
+
+@app.route("/services/enquiry", methods=["POST"])
+def service_enquiry():
+    """Validate and store a service enquiry in Google Sheets or a local CSV fallback."""
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    phone = request.form.get("phone", "").strip()
+    category = request.form.get("category", "").strip()
+    service = request.form.get("service", "").strip()
+    message = request.form.get("message", "").strip()
+
+    if not name or not (email or phone) or not category or not service:
+        flash("Please provide your name, at least one contact method, and select a service.", "error")
+        return redirect(url_for("home") + "#services")
+    if email and not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        flash("Please enter a valid email address.", "error")
+        return redirect(url_for("home") + "#services")
+    if phone and not re.match(r"^[0-9+() .-]{7,20}$", phone):
+        flash("Please enter a valid phone number.", "error")
+        return redirect(url_for("home") + "#services")
+    if len(message) > 3000:
+        flash("Please keep your message under 3,000 characters.", "error")
+        return redirect(url_for("home") + "#services")
+
+    services_helper.save_enquiry({"name": name, "email": email, "phone": phone,
+                                  "category": category, "service": service, "message": message})
+    flash("Thank you! Your service enquiry has been submitted. Our team will contact you.", "success")
+    return redirect(url_for("home") + "#services")
 
 
 @app.route("/api/faq", methods=["POST"])

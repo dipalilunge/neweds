@@ -3,7 +3,7 @@ services:
     name: engineering-design-studio
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    startCommand: gunicorn --workers 2 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT app:app
     healthCheckPath: /
     envVars:
       - key: EDS_SECRET_KEY
@@ -13,6 +13,12 @@ services:
       - key: EDS_STUDENT_PASSWORD
         sync: false
       - key: EDS_ADMISSIONS_SHEET_ID
-        sync: false
+        value: 1YBCkcWHIPdDpakjIm3J8hB_WRlLT8NxoY6nzde6CtIE
+      - key: EDS_ADMISSIONS_WORKSHEET
+        value: Admissions
+      - key: EDS_SERVICES_SHEET_ID
+        value: 1RVHEUbSoEpmUX3u3JIjcRI8uPt3O2VBCVvkU26yIjpM
+      - key: EDS_SERVICES_WORKSHEET
+        value: Service Inquiries
       - key: EDS_GOOGLE_CREDENTIALS_JSON
         sync: false
