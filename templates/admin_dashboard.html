@@ -9,8 +9,8 @@
     <span>{{ institute.name }}</span>
   </a>
   <div class="dash-nav__right">
-    <span class="sync-pill {{ 'sync-pill--live' if using_sheets else 'sync-pill--local' }}">
-      {{ "● Synced to Google Sheets" if using_sheets else "● Saving locally (Sheets not configured)" }}
+    <span class="sync-pill {{ 'sync-pill--local' if storage_backend == 'local CSV' else 'sync-pill--live' }}">
+      ● Saving to {{ storage_backend }}
     </span>
     <a href="{{ url_for('admin_logout') }}" class="btn btn--ghost btn--small">Log out</a>
   </div>

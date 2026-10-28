@@ -271,7 +271,7 @@ def admin_dashboard():
         submissions=submissions,
         content=portal_storage.get_all_content(),
         recent=recent,
-        using_sheets=sheets_helper.is_using_google_sheets(),
+        storage_backend=sheets_helper.get_storage_backend(),
     )
 
 

@@ -96,6 +96,10 @@ SERVICES_SHEET_ID = os.environ.get(
 SERVICES_WORKSHEET_NAME = os.environ.get("EDS_SERVICES_WORKSHEET", "Service Inquiries")
 LOCAL_SERVICE_INQUIRIES_FALLBACK = "service_inquiries_local.csv"
 
+# Optional hosted database for admissions and service enquiries.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
 # If the sheet isn't configured yet, admissions are saved locally to this
 # CSV file instead, so the form still works during setup/demo.
 LOCAL_ADMISSIONS_FALLBACK = "admissions_local.csv"

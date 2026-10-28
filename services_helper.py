@@ -3,6 +3,7 @@ import csv
 import os
 from datetime import datetime
 import config
+import supabase_helper
 
 FIELDNAMES = ["Timestamp", "Name", "Email", "Phone", "Service Category", "Service Required", "Message"]
 _sheet = None
@@ -65,6 +66,22 @@ def save_enquiry(data):
         "Service Required": data.get("service", "").strip(),
         "Message": data.get("message", "").strip(),
     }
+    if supabase_helper.is_configured():
+        supabase_helper.request(
+            "POST",
+            "service_enquiries",
+            payload={
+                "timestamp": row["Timestamp"],
+                "name": row["Name"],
+                "email": row["Email"],
+                "phone": row["Phone"],
+                "service_category": row["Service Category"],
+                "service_required": row["Service Required"],
+                "message": row["Message"],
+            },
+        )
+        return row
+
     sheet = _connect()
     if sheet is not None:
         sheet.append_row([row[field] for field in FIELDNAMES], value_input_option="USER_ENTERED")

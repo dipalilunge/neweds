@@ -11,6 +11,7 @@ import os
 from datetime import datetime
 
 import config
+import supabase_helper
 
 FIELDNAMES = [
     "Timestamp",
@@ -101,6 +102,12 @@ def is_using_google_sheets() -> bool:
     return _try_connect() is not None
 
 
+def get_storage_backend() -> str:
+    if supabase_helper.is_configured():
+        return "Supabase"
+    return "Google Sheets" if is_using_google_sheets() else "local CSV"
+
+
 def _local_csv_path():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), config.LOCAL_ADMISSIONS_FALLBACK)
 
@@ -143,6 +150,28 @@ def add_admission(record: dict):
         "Batch ID": record.get("batch_id", ""),
     }
 
+    if supabase_helper.is_configured():
+        supabase_helper.request(
+            "POST",
+            "admissions",
+            payload={
+                "timestamp": row["Timestamp"],
+                "student_name": row["Student Name"],
+                "course_name": row["Course Name"],
+                "course_fees": row["Course Fees"],
+                "aadhar_number": row["Aadhar Number"],
+                "college_name": row["College Name"],
+                "mobile_number": row["Mobile Number"],
+                "address": row["Address"],
+                "placement_details": row["Placement Details"],
+                "payment_method": row["Payment Method"],
+                "transaction_id": row["Transaction ID"],
+                "batch_name": row["Batch Name"],
+                "batch_id": row["Batch ID"],
+            },
+        )
+        return row
+
     worksheet = _try_connect()
     if worksheet is not None:
         worksheet.append_row([row[f] for f in FIELDNAMES])
@@ -154,6 +183,14 @@ def add_admission(record: dict):
 
 def get_recent_admissions(limit: int = 20):
     """Return the most recent admissions (newest first) from whichever store is active."""
+    if supabase_helper.is_configured():
+        records = supabase_helper.request(
+            "GET",
+            "admissions",
+            params={"select": "*", "order": "created_at.desc", "limit": limit},
+        )
+        return [_from_supabase_record(record) for record in records]
+
     worksheet = _try_connect()
     if worksheet is not None:
         records = worksheet.get_all_records()
@@ -171,6 +208,18 @@ def is_name_admitted(name: str) -> bool:
     """Return True if `name` (case-insensitive) appears in the admissions records."""
     if not name:
         return False
+    if supabase_helper.is_configured():
+        records = supabase_helper.request(
+            "GET",
+            "admissions",
+            params={
+                "select": "id",
+                "student_name": f"ilike.{name.strip()}",
+                "limit": 1,
+            },
+        )
+        return bool(records)
+
     worksheet = _try_connect()
     target = name.strip().lower()
     if worksheet is not None:
@@ -195,6 +244,19 @@ def get_admission_for_name(name: str):
     """Return the latest admission record for a student name."""
     if not name:
         return None
+    if supabase_helper.is_configured():
+        records = supabase_helper.request(
+            "GET",
+            "admissions",
+            params={
+                "select": "*",
+                "student_name": f"ilike.{name.strip()}",
+                "order": "created_at.desc",
+                "limit": 1,
+            },
+        )
+        return _from_supabase_record(records[0]) if records else None
+
     target = name.strip().lower()
     worksheet = _try_connect()
     if worksheet is not None:
@@ -209,3 +271,21 @@ def get_admission_for_name(name: str):
         (r for r in records if str(r.get("Student Name", "")).strip().lower() == target),
         None,
     )
+
+
+def _from_supabase_record(record):
+    return {
+        "Timestamp": record.get("timestamp", ""),
+        "Student Name": record.get("student_name", ""),
+        "Course Name": record.get("course_name", ""),
+        "Course Fees": record.get("course_fees", ""),
+        "Aadhar Number": record.get("aadhar_number", ""),
+        "College Name": record.get("college_name", ""),
+        "Mobile Number": record.get("mobile_number", ""),
+        "Address": record.get("address", ""),
+        "Placement Details": record.get("placement_details", ""),
+        "Payment Method": record.get("payment_method", ""),
+        "Transaction ID": record.get("transaction_id", ""),
+        "Batch Name": record.get("batch_name", ""),
+        "Batch ID": record.get("batch_id", ""),
+    }
